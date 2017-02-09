@@ -1,8 +1,8 @@
 class Opencascade < Formula
   desc "3D modeling and numerical simulation software for CAD/CAM/CAE"
-  homepage "http://www.opencascade.org/"
-  url "https://sources.archlinux.org/other/community/opencascade/opencascade-7.0.0.tgz"
-  sha256 "073445b37b62d005a64744ba601f36ec118a25913dee4e6419f30dc9594a90dc"
+  homepage "https://dev.opencascade.org/"
+  url "https://github.com/FreeCAD/homebrew-freecad/releases/download/0/opencascade-7.1.0.tgz"
+  sha256 "8aaf1e29edc791ad611172dcbcc6efa35ada1e02a5eb7186a837131f85231d71"
 
   bottle do
     cellar :any
@@ -12,26 +12,24 @@ class Opencascade < Formula
     sha256 "bb4455c156a0942f0def7371b10950118724235f1aeb9acf7eed2910b2f277e9" => :yosemite
   end
 
-  conflicts_with "oce", :because => "OCE is a fork for patches/improvements/experiments over OpenCascade"
-
   option "without-opencl", "Build without OpenCL support" if OS.mac?
-  option "without-extras", "Don't install documentation (~725MB) or samples (~40MB)"
+  option "with-extras", "Install documentation (~17 MB), source files (~113 MB), samples and templates"
   option "with-test", "Install tests (~55MB)"
   deprecated_option "with-tests" => "with-test"
 
   depends_on "cmake" => :build
   depends_on "freetype"
+  depends_on "doxygen" if build.with? "extras"
   depends_on "freeimage" => :recommended
   depends_on "gl2ps" => :recommended
   depends_on "tbb" => :recommended if OS.mac? # Couldn't make it find TBB...
   depends_on :macos => :snow_leopard
 
+  conflicts_with "oce", :because => "OCE is a fork for patches/improvements/experiments over OpenCascade"
+
   def install
     # recent xcode stores it's sdk in the application folder
     sdk_path = Pathname.new `xcrun --show-sdk-path`.strip
-
-    # setting DYLD causes many issues; all tests work fine without; suppress
-    inreplace "env.sh", "export DYLD_LIBRARY_PATH", "export OCCT_DYLD_LIBRARY_PATH" if OS.mac?
 
     cmake_args = std_cmake_args
     cmake_args << "-DCMAKE_PREFIX_PATH:PATH=#{HOMEBREW_PREFIX}"
@@ -45,11 +43,12 @@ class Opencascade < Formula
     cmake_args << "-DINSTALL_TESTS:BOOL=ON" if build.with? "tests"
     cmake_args << "-D3RDPARTY_TBB_DIR:PATH=#{HOMEBREW_PREFIX}" if build.with? "tbb"
     cmake_args << "-DINSTALL_SAMPLES=ON" if build.with? "extras"
+    cmake_args << "-DINSTALL_DOC_Overview:BOOL=ON" if build.with? "extras"
 
     # must specify, otherwise finds old ft2config.h in /usr/X11R6
     cmake_args << "-D3RDPARTY_FREETYPE_INCLUDE_DIR:PATH=#{HOMEBREW_PREFIX}/include/freetype2" if OS.mac?
 
-    %w[freeimage gl2ps opencl tbb].each do |feature|
+    %w[freeimage gl2ps tbb].each do |feature|
       cmake_args << "-DUSE_#{feature.upcase}:BOOL=ON" if build.with? feature
     end
 
@@ -57,19 +56,23 @@ class Opencascade < Formula
     if build.with?("opencl") && opencl_path.exist?
       cmake_args << "-D3RDPARTY_OPENCL_INCLUDE_DIR:PATH=#{opencl_path}/Headers"
       cmake_args << "-D3RDPARTY_OPENCL_DLL:FILEPATH=#{opencl_path}/Libraries/libcl2module.dylib"
-
-      # link against the Apple built-in OpenCL Framework
-      # inreplace "adm/cmake/TKOpenGL/CMakeLists.txt", "list( APPEND TKOpenGl_USED_LIBS OpenCL )", <<-EOF.undent
-      #  find_library(FRAMEWORKS_OPENCL NAMES OpenCL)
-      #  list( APPEND TKOpenGl_USED_LIBS ${FRAMEWORKS_OPENCL} )
-      # EOF
     end
 
-    system "cmake", ".", *cmake_args
-    system "make", "install"
+    mkdir "build" do
+      system "cmake", "..", *cmake_args
+      system "make", "install"
 
-    if build.with? "extras"
-      prefix.install "doc", "samples", "src"
+      if build.with? "extras"
+        # Install the original source and adm scripts/templates
+        prefix.install "../src"
+        prefix.install "../adm"
+        share.install_symlink prefix/"adm"
+      else
+        # Some apss expect resoures in legacy ${CASROOT}/src directory
+        cd prefix do
+          ln_s "share/opencascade/resources", "src"
+        end
+      end
     end
 
     # add symlinks to be able to compile against OpenCascade
