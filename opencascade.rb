@@ -19,43 +19,53 @@ class Opencascade < Formula
 
   depends_on "cmake" => :build
   depends_on "freetype"
-  depends_on "doxygen" if build.with? "extras"
   depends_on "freeimage" => :recommended
-  depends_on "gl2ps" => :recommended
-  depends_on "tbb" => :recommended if OS.mac? # Couldn't make it find TBB...
-  depends_on :macos => :snow_leopard
+  depends_on "tbb"       => :recommended
+  depends_on "gl2ps"     => :recommended if OS.mac? # Not yet available in Linuxbrew
+  depends_on "doxygen"   if build.with? "extras"
+  depends_on :macos      => :snow_leopard
+
+  unless OS.mac?
+    depends_on :x11
+    depends_on "homebrew/dupes/tcl-tk"
+    depends_on "linuxbrew/xorg/mesa"
+  end
 
   conflicts_with "oce", :because => "OCE is a fork for patches/improvements/experiments over OpenCascade"
 
   def install
-    # recent xcode stores it's sdk in the application folder
-    sdk_path = Pathname.new `xcrun --show-sdk-path`.strip
-
     cmake_args = std_cmake_args
     cmake_args << "-DCMAKE_PREFIX_PATH:PATH=#{HOMEBREW_PREFIX}"
     cmake_args << "-DCMAKE_INCLUDE_PATH:PATH=#{HOMEBREW_PREFIX}/lib"
-    cmake_args << "-DCMAKE_FRAMEWORK_PATH:PATH=#{HOMEBREW_PREFIX}/Frameworks" if OS.mac?
-    cmake_args << "-DINSTALL_DIR:PATH=#{prefix}"
     cmake_args << "-D3RDPARTY_DIR:PATH=#{HOMEBREW_PREFIX}"
-    cmake_args << "-D3RDPARTY_TCL_DIR:PATH=/usr"
-    cmake_args << "-D3RDPARTY_TCL_INCLUDE_DIR:PATH=#{sdk_path}/usr/include/"
-    cmake_args << "-D3RDPARTY_TK_INCLUDE_DIR:PATH=#{sdk_path}/usr/include/"
     cmake_args << "-DINSTALL_TESTS:BOOL=ON" if build.with? "tests"
     cmake_args << "-D3RDPARTY_TBB_DIR:PATH=#{HOMEBREW_PREFIX}" if build.with? "tbb"
-    cmake_args << "-DINSTALL_SAMPLES=ON" if build.with? "extras"
-    cmake_args << "-DINSTALL_DOC_Overview:BOOL=ON" if build.with? "extras"
 
-    # must specify, otherwise finds old ft2config.h in /usr/X11R6
-    cmake_args << "-D3RDPARTY_FREETYPE_INCLUDE_DIR:PATH=#{HOMEBREW_PREFIX}/include/freetype2" if OS.mac?
-
-    %w[freeimage gl2ps tbb].each do |feature|
+    %w[freeimage gl2ps opencl tbb].each do |feature|
       cmake_args << "-DUSE_#{feature.upcase}:BOOL=ON" if build.with? feature
     end
 
-    opencl_path = Pathname.new "#{sdk_path}/System/Library/Frameworks/OpenCL.framework/Versions/Current"
-    if build.with?("opencl") && opencl_path.exist?
-      cmake_args << "-D3RDPARTY_OPENCL_INCLUDE_DIR:PATH=#{opencl_path}/Headers"
-      cmake_args << "-D3RDPARTY_OPENCL_DLL:FILEPATH=#{opencl_path}/Libraries/libcl2module.dylib"
+    if OS.mac?
+      sdk_path = Pathname.new `xcrun --show-sdk-path`.strip
+      cmake_args << "-D3RDPARTY_TCL_DIR:PATH=/usr"
+      cmake_args << "-D3RDPARTY_TCL_INCLUDE_DIR:PATH=#{sdk_path}/usr/include/"
+      cmake_args << "-D3RDPARTY_TK_INCLUDE_DIR:PATH=#{sdk_path}/usr/include/"
+      cmake_args << "-DCMAKE_FRAMEWORK_PATH:PATH=#{HOMEBREW_PREFIX}/Frameworks"
+      cmake_args << "-D3RDPARTY_FREETYPE_INCLUDE_DIR:PATH=#{HOMEBREW_PREFIX}/include/freetype2"
+      opencl_path = Pathname.new "#{sdk_path}/System/Library/Frameworks/OpenCL.framework/Versions/Current"
+      if build.with?("opencl") && opencl_path.exist?
+        cmake_args << "-D3RDPARTY_OPENCL_INCLUDE_DIR:PATH=#{opencl_path}/Headers"
+        cmake_args << "-D3RDPARTY_OPENCL_DLL:FILEPATH=#{opencl_path}/Libraries/libcl2module.dylib"
+      end
+    else
+      cmake_args << "-D3RDPARTY_TCL_DIR:PATH=#{Formula["tcl-tk"].prefix}"
+      cmake_args << "-D3RDPARTY_TCL_INCLUDE_DIR:PATH=#{HOMEBREW_PREFIX}/include"
+      cmake_args << "-D3RDPARTY_TK_INCLUDE_DIR:PATH=#{HOMEBREW_PREFIX}/include"
+    end
+
+    if build.with? "extras"
+      cmake_args << "-DINSTALL_SAMPLES=ON"
+      cmake_args << "-DINSTALL_DOC_Overview:BOOL=ON"
     end
 
     mkdir "build" do
@@ -63,7 +73,6 @@ class Opencascade < Formula
       system "make", "install"
 
       if build.with? "extras"
-        # Install the original source and adm scripts/templates
         prefix.install "../src"
         prefix.install "../adm"
         share.install_symlink prefix/"adm"
@@ -84,9 +93,6 @@ class Opencascade < Formula
   def caveats; <<-EOF.undent
     Some apps will require this enviroment variable:
       CASROOT=#{opt_prefix}
-
-    On Linux make sure the following libraries are installed:
-      sudo apt-get install libgl2ps-dev tcl8.6-dev tk8.6-dev libgl1-mesa-dev libglu1-mesa-dev libxmu-dev libxext-dev
     EOF
   end
 
