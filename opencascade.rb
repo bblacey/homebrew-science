@@ -1,9 +1,8 @@
 class Opencascade < Formula
   desc "3D modeling and numerical simulation software for CAD/CAM/CAE"
   homepage "https://dev.opencascade.org/"
-  url "https://github.com/FreeCAD/homebrew-freecad/releases/download/0/opencascade-7.1.0.tgz"
-  sha256 "8aaf1e29edc791ad611172dcbcc6efa35ada1e02a5eb7186a837131f85231d71"
-  revision 1
+  url "https://github.com/FreeCAD/homebrew-freecad/releases/download/0/opencascade-7.2.0.tgz"
+  sha256 "f9a81ca2267635773af9fff80625735dd4f65389af986fe93a94263081b422e9"
 
   bottle do
     cellar :any
